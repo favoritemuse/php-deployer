@@ -1,0 +1,53 @@
+name: Add Cron Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'Server IP address'
+        required: true
+        type: string
+      cron_schedule:
+        description: 'Cron schedule (e.g., * * * * *)'
+        required: true
+        type: string
+      command:
+        description: 'Command to run (e.g., php /var/www/html/cron.php)'
+        required: true
+        type: string
+      container_name:
+        description: 'Container name (default: php-apache)'
+        required: false
+        default: 'php-apache'
+        type: string
+
+jobs:
+  add-cron:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > ~/.ssh/roman
+          chmod 600 ~/.ssh/roman
+
+      - name: Add cron job to container
+        run: |
+          CRON_ENTRY="${{ github.event.inputs.cron_schedule }} ${{ github.event.inputs.command }}"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/roman root@${{ github.event.inputs.server_ip }} \
+            "docker exec ${{ github.event.inputs.container_name }} sh -c '(crontab -l 2>/dev/null; echo \"$CRON_ENTRY\") | crontab -'"
+
+      - name: Verify cron job
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/roman root@${{ github.event.inputs.server_ip }} \
+            "docker exec ${{ github.event.inputs.container_name }} crontab -l"
+
+      - name: Summary
+        run: |
+          echo "## Cron Job Added" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server:** \`${{ github.event.inputs.server_ip }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Container:** \`${{ github.event.inputs.container_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Schedule:** \`${{ github.event.inputs.cron_schedule }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Command:** \`${{ github.event.inputs.command }}\`" >> $GITHUB_STEP_SUMMARY

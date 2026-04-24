@@ -1,0 +1,148 @@
+---
+- name: Setup PHP server with Docker
+  hosts: all
+  become: yes
+  vars:
+    domain_name: "{{ domain }}"
+    project_name: "{{ domain | regex_replace('\\.', '_') }}"
+    db_name: "{{ domain | regex_replace('[\\.-]', '_') }}"
+    db_user: "{{ domain | regex_replace('[\\.-]', '_') }}"
+    db_password: "{{ db_password | default('changeme_db') }}"
+    db_root_password: "{{ db_root_password | default('changeme_root') }}"
+    admin_user: "{{ domain | regex_replace('[\\.-]', '_') | lower }}"
+    admin_password: "{{ admin_password | default('changeme_admin') }}"
+    roman_ssh_key: "{{ lookup('file', '/home/roman/.ssh/roman.pub') }}"
+    jeka_ssh_key: "{{ lookup('file', '/home/roman/.ssh/jeka.pub') }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - curl
+          - jq
+          - git
+        state: present
+
+    - name: Create admin user
+      user:
+        name: "{{ admin_user }}"
+        password: "{{ admin_password | password_hash('sha512') }}"
+        state: present
+        shell: /bin/bash
+
+    - name: Add admin user to docker group
+      user:
+        name: "{{ admin_user }}"
+        groups: docker
+        append: yes
+
+    - name: Create SSH directory for admin user
+      file:
+        path: "/home/{{ admin_user }}/.ssh"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0700'
+
+    - name: Add SSH keys for admin user
+      authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ item }}"
+        state: present
+      loop:
+        - "{{ roman_ssh_key }}"
+        - "{{ jeka_ssh_key }}"
+      when: item is defined and item != ""
+
+    - name: Create project directory
+      file:
+        path: "/home/{{ admin_user }}/{{ project_name }}"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0755'
+
+    - name: Clone server template
+      git:
+        repo: https://github.com/favoritemuse/server-template.git
+        dest: "/home/{{ admin_user }}/{{ project_name }}"
+        version: main
+        force: yes
+
+    - name: Create PHP www directory
+      file:
+        path: "/home/{{ admin_user }}/{{ project_name }}/php/www"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0755'
+
+    - name: Create .env file with database credentials
+      copy:
+        dest: "/home/{{ admin_user }}/{{ project_name }}/.env"
+        content: |
+          DB_NAME={{ db_name }}
+          DB_USER={{ db_user }}
+          DB_PASSWORD={{ db_password }}
+          DB_ROOT_PASSWORD={{ db_root_password }}
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0600'
+
+    - name: Create test PHP file
+      copy:
+        dest: "/home/{{ admin_user }}/{{ project_name }}/php/www/index.php"
+        content: |
+          <?php
+          phpinfo();
+          ?>
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0644'
+
+    - name: Start Docker containers
+      community.docker.docker_compose_v2:
+        project_src: "/home/{{ admin_user }}/{{ project_name }}"
+        state: present
+        build: always
+      become_user: "{{ admin_user }}"
+
+    - name: Save credentials file
+      copy:
+        dest: "/home/{{ admin_user }}/{{ project_name }}/server_passwords.txt"
+        content: |
+          Domain: {{ domain_name }}
+          Database Name: {{ db_name }}
+          Database User: {{ db_user }}
+          Database Password: {{ db_password }}
+          DB Root Password: {{ db_root_password }}
+          Admin User: {{ admin_user }}
+          Admin Password: {{ admin_password }}
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: '0600'
+
+    - name: Set ownership for project directory
+      file:
+        path: "/home/{{ admin_user }}/{{ project_name }}"
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        recurse: yes
+
+    - name: Print deployment info
+      debug:
+        msg: |
+          Deployment complete!
+          Domain: {{ domain_name }}
+          Server IP: {{ ansible_host }}
+          Database User: {{ db_user }}
+          Database Password: {{ db_password }}
+          Admin User: {{ admin_user }}
+          phpMyAdmin: http://{{ ansible_host }}:8080

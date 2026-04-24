@@ -1,0 +1,6 @@
+*.tfstate
+*.tfstate.backup
+.terraform/
+.env
+server_passwords.txt
+*.log

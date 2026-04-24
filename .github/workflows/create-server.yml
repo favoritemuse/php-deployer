@@ -1,0 +1,160 @@
+name: Create Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Domain name (e.g., example.com)'
+        required: true
+        type: string
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
+          TF_VAR_domain: ${{ github.event.inputs.domain }}
+          TF_VAR_region: "ams3"
+          TF_VAR_size: "s-1vcpu-1gb"
+          TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_KEY_FINGERPRINT }}
+          TF_VAR_ssh_private_key_path: "/tmp/ssh_key"
+        run: |
+          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+          terraform apply -auto-approve \
+            -var="do_token=${{ secrets.DO_TOKEN }}" \
+            -var="domain=${{ github.event.inputs.domain }}" \
+            -var="region=ams3" \
+            -var="size=s-1vcpu-1gb" \
+            -var="ssh_key_fingerprint=${{ secrets.DO_SSH_KEY_FINGERPRINT }}" \
+            -var="ssh_private_key_path=/tmp/ssh_key"
+
+      - name: Get Server IP
+        working-directory: terraform
+        run: |
+          SERVER_IP=$(terraform output -raw server_ip)
+          echo "SERVER_IP=$SERVER_IP" >> $GITHUB_ENV
+          echo "Server IP: $SERVER_IP"
+
+      - name: Wait for SSH
+        run: |
+          echo "Waiting for SSH to be available..."
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i /tmp/ssh_key root@${{ env.SERVER_IP }} "echo ready"; then
+              echo "SSH is ready"
+              break
+            fi
+            echo "Attempt $i/30 - waiting..."
+            sleep 10
+          done
+
+      - name: Generate passwords
+        run: |
+          DB_PASSWORD=$(openssl rand -base64 24)
+          DB_ROOT_PASSWORD=$(openssl rand -base64 24)
+          ADMIN_PASSWORD=$(openssl rand -base64 24)
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          echo "DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
+
+      - name: Setup SSH key for Ansible
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > ~/.ssh/roman
+          chmod 600 ~/.ssh/roman
+          echo "${{ secrets.ROMAN_SSH_PUB_KEY }}" > ~/.ssh/roman.pub
+          echo "${{ secrets.JEKA_SSH_PUB_KEY }}" > ~/.ssh/jeka.pub
+
+      - name: Run Ansible
+        working-directory: ansible
+        run: |
+          ansible-playbook deploy.yaml \
+            -i "${{ env.SERVER_IP }}, " \
+            -e "domain=${{ github.event.inputs.domain }}" \
+            -e "db_password=${{ env.DB_PASSWORD }}" \
+            -e "db_root_password=${{ env.DB_ROOT_PASSWORD }}" \
+            -e "admin_password=${{ env.ADMIN_PASSWORD }}" \
+            --private-key ~/.ssh/roman
+
+      - name: Configure Cloudflare DNS
+        run: |
+          python3 - << 'EOF'
+          import requests
+          import os
+
+          api_token = "${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          domain = "${{ github.event.inputs.domain }}"
+          server_ip = "${{ env.SERVER_IP }}"
+          mail_server_ip = "${{ secrets.MAIL_SERVER_IP }}"
+
+          headers = {
+              "Authorization": f"Bearer {api_token}",
+              "Content-Type": "application/json"
+          }
+
+          # Get zone ID
+          zones = requests.get(f"https://api.cloudflare.com/client/v4/zones?name={domain}", headers=headers).json()
+          if not zones.get("success") or not zones["result"]:
+              print(f"Zone not found: {domain}")
+              exit(1)
+          zone_id = zones["result"][0]["id"]
+
+          records = [
+              {"type": "A", "name": domain, "content": server_ip, "ttl": 1, "proxied": True},
+              {"type": "A", "name": f"www.{domain}", "content": server_ip, "ttl": 1, "proxied": True},
+              {"type": "A", "name": f"mail.{domain}", "content": mail_server_ip, "ttl": 1, "proxied": False},
+              {"type": "MX", "name": domain, "content": f"mail.{domain}.", "priority": 100, "ttl": 1},
+              {"type": "TXT", "name": domain, "content": f"v=spf1 mx ip4:{mail_server_ip} ~all", "ttl": 1},
+              {"type": "TXT", "name": f"_dmarc.{domain}", "content": "v=DMARC1;p=none", "ttl": 1},
+          ]
+
+          for record in records:
+              resp = requests.post(
+                  f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+                  headers=headers,
+                  json=record
+              )
+              if resp.json().get("success"):
+                  print(f"Created: {record['type']} {record['name']}")
+              else:
+                  print(f"Failed: {record['type']} {record['name']} - {resp.text}")
+
+          # Enable Always Use HTTPS
+          requests.patch(
+              f"https://api.cloudflare.com/client/v4/zones/{zone_id}/settings/always_use_https",
+              headers=headers,
+              json={"value": "on"}
+          )
+          print("Always Use HTTPS enabled")
+          EOF
+
+      - name: Save credentials
+        run: |
+          echo "## Server Created: ${{ github.event.inputs.domain }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Server IP | \`${{ env.SERVER_IP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Domain | \`${{ github.event.inputs.domain }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB User | \`${{ github.event.inputs.domain | replace('.', '_') }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB Password | \`${{ env.DB_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB Root Password | \`${{ env.DB_ROOT_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| phpMyAdmin | http://${{ env.SERVER_IP }}:8080 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Save these credentials securely!**" >> $GITHUB_STEP_SUMMARY

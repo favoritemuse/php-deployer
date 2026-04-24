@@ -1,0 +1,2 @@
+[linux]
+linux ansible_user=root ansible_ssh_private_key_file=/home/roman/.ssh/roman

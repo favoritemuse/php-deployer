@@ -1,0 +1,77 @@
+name: Scale Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'Server IP address'
+        required: true
+        type: string
+      new_size:
+        description: 'New droplet size'
+        required: true
+        type: choice
+        options:
+          - s-1vcpu-1gb ($6/mo)
+          - s-1vcpu-2gb ($12/mo)
+          - s-2vcpu-2gb ($18/mo)
+          - s-2vcpu-4gb ($24/mo)
+          - c-2 ($42/mo)
+          - c-4 ($84/mo)
+          - g-2vcpu-8gb ($96/mo)
+          - g-4vcpu-16gb ($192/mo)
+
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Extract size slug
+        id: size
+        run: |
+          case "${{ github.event.inputs.new_size }}" in
+            "s-1vcpu-1gb ($6/mo)") echo "slug=s-1vcpu-1gb" >> $GITHUB_OUTPUT ;;
+            "s-1vcpu-2gb ($12/mo)") echo "slug=s-1vcpu-2gb" >> $GITHUB_OUTPUT ;;
+            "s-2vcpu-2gb ($18/mo)") echo "slug=s-2vcpu-2gb" >> $GITHUB_OUTPUT ;;
+            "s-2vcpu-4gb ($24/mo)") echo "slug=s-2vcpu-4gb" >> $GITHUB_OUTPUT ;;
+            "c-2 ($42/mo)") echo "slug=c-2" >> $GITHUB_OUTPUT ;;
+            "c-4 ($84/mo)") echo "slug=c-4" >> $GITHUB_OUTPUT ;;
+            "g-2vcpu-8gb ($96/mo)") echo "slug=g-2vcpu-8gb" >> $GITHUB_OUTPUT ;;
+            "g-4vcpu-16gb ($192/mo)") echo "slug=g-4vcpu-16gb" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Resize droplet via DO API
+        run: |
+          DROPLET_ID=$(curl -s -X GET \
+            "https://api.digitalocean.com/v2/droplets?name=$(curl -s -X GET \
+              -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
+              "https://api.digitalocean.com/v2/droplets" | \
+              jq -r ".droplets[] | select(.networks.v4[] | select(.ip_address == \"${{ github.event.inputs.server_ip }}\" and .type == \"public\")).name")" \
+            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" | \
+            jq -r ".droplets[0].id")
+
+          echo "Resizing droplet $DROPLET_ID to ${{ steps.size.outputs.slug }}"
+
+          curl -X POST \
+            "https://api.digitalocean.com/v2/droplets/$DROPLET_ID/actions" \
+            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"type\":\"resize\",\"size\":\"${{ steps.size.outputs.slug }}\"}"
+
+      - name: Wait for resize to complete
+        run: |
+          echo "Waiting for resize to complete (this may take 5-15 minutes)..."
+          sleep 300
+          echo "Resize should be complete. Verify in DigitalOcean dashboard."
+
+      - name: Summary
+        run: |
+          echo "## Server Scaled" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server IP:** \`${{ github.event.inputs.server_ip }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Size:** ${{ github.event.inputs.new_size }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Verify the server is working correctly after resize!**" >> $GITHUB_STEP_SUMMARY
