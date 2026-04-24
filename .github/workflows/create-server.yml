@@ -258,7 +258,7 @@ jobs:
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Server IP | \`${{ env.SERVER_IP }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Domain | \`${{ github.event.inputs.domain }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| DB User | \`${{ github.event.inputs.domain | replace('.', '_') }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB User | \`${{ replace(github.event.inputs.domain, '.', '_') }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| DB Password | \`${{ env.DB_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| DB Root Password | \`${{ env.DB_ROOT_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| phpMyAdmin | http://${{ env.SERVER_IP }}:8080 |" >> $GITHUB_STEP_SUMMARY
