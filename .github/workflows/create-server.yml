@@ -7,6 +7,11 @@ on:
         description: 'Domain or subdomain (e.g., example.com or test.example.com)'
         required: true
         type: string
+      enable_mail:
+        description: 'Create mail domain and accounts'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   create:
@@ -171,31 +176,23 @@ jobs:
           PYEOF
 
       - name: Create mail domain on mail server
+        if: github.event.inputs.enable_mail == 'true'
+        id: mail
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/admin root@${{ secrets.MAIL_SERVER_IP }} << 'MAILSCRIPT'
-          DOMAIN="${{ github.event.inputs.domain }}"
-          PASSWORD1=$(openssl rand -base64 24)
-          PASSWORD2=$(openssl rand -base64 24)
-          PASSWORD3=$(openssl rand -base64 24)
-          PASSWORD4=$(openssl rand -base64 24)
-
-          /usr/local/vesta/bin/v-add-mail-domain admin $DOMAIN no no yes
-          /usr/local/vesta/bin/v-add-mail-account admin $DOMAIN admin $PASSWORD1
-          /usr/local/vesta/bin/v-add-mail-account admin $DOMAIN office $PASSWORD2
-          /usr/local/vesta/bin/v-add-mail-account admin $DOMAIN support $PASSWORD3
-          /usr/local/vesta/bin/v-add-mail-account admin $DOMAIN info $PASSWORD4
-
-          DKIM=$(cat /usr/local/vesta/data/users/admin/mail/$DOMAIN.pub | sed 's/-----BEGIN PUBLIC KEY-----//g' | sed 's/-----END PUBLIC KEY-----//g' | tr -d '\n')
-
-          echo "MAIL_ADMIN_PASSWORD=$PASSWORD1" >> $GITHUB_ENV
-          echo "MAIL_OFFICE_PASSWORD=$PASSWORD2" >> $GITHUB_ENV
-          echo "MAIL_SUPPORT_PASSWORD=$PASSWORD3" >> $GITHUB_ENV
-          echo "MAIL_INFO_PASSWORD=$PASSWORD4" >> $GITHUB_ENV
-          echo "MAIL_DKIM_KEY=$DKIM" >> $GITHUB_ENV
-          MAILSCRIPT
+          chmod +x scripts/create-mail-domain.sh
+          OUTPUT=$(./scripts/create-mail-domain.sh \
+            "${{ github.event.inputs.domain }}" \
+            "${{ secrets.MAIL_SERVER_IP }}" \
+            "~/.ssh/admin")
+          
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          
+          while IFS='=' read -r key value; do
+            echo "$key=$value" >> $GITHUB_ENV
+          done <<< "$OUTPUT"
 
       - name: Add DKIM record to Cloudflare
-        if: env.MAIL_DKIM_KEY != ''
+        if: github.event.inputs.enable_mail == 'true' && env.MAIL_DKIM_KEY != ''
         run: |
           python3 - << 'PYEOF'
           import requests
@@ -246,68 +243,11 @@ jobs:
               print(f"Failed to create DKIM record: {resp.text}")
           PYEOF
 
-      - name: Send credentials via email
-        run: |
-          python3 - << 'PYEOF'
-          import smtplib
-          from email.mime.text import MIMEText
-          from email.mime.multipart import MIMEMultipart
-          import os
-
-          domain = "${{ github.event.inputs.domain }}"
-          server_ip = "${{ env.SERVER_IP }}"
-          mail_server_ip = "${{ secrets.MAIL_SERVER_IP }}"
-          recipient = "${{ secrets.ADMIN_EMAIL }}"
-
-          db_user = domain.replace(".", "_")
-          db_password = os.environ.get("DB_PASSWORD", "")
-          db_root_password = os.environ.get("DB_ROOT_PASSWORD", "")
-          admin_password = os.environ.get("ADMIN_PASSWORD", "")
-          mail_admin_pass = os.environ.get("MAIL_ADMIN_PASSWORD", "")
-          mail_office_pass = os.environ.get("MAIL_OFFICE_PASSWORD", "")
-          mail_support_pass = os.environ.get("MAIL_SUPPORT_PASSWORD", "")
-          mail_info_pass = os.environ.get("MAIL_INFO_PASSWORD", "")
-
-          body = f"""
-          Server Created: {domain}
-          ========================================
-
-          SERVER
-          Server IP: {server_ip}
-          Domain: {domain}
-
-          DATABASE
-          DB User: {db_user}
-          DB Password: {db_password}
-          DB Root Password: {db_root_password}
-
-          phpMyAdmin: http://{server_ip}:8080
-
-          MAIL ACCOUNTS
-          admin@{domain} - {mail_admin_pass}
-          office@{domain} - {mail_office_pass}
-          support@{domain} - {mail_support_pass}
-          info@{domain} - {mail_info_pass}
-
-          ========================================
-          """
-
-          msg = MIMEText(body)
-          msg["Subject"] = f"Server Created: {domain}"
-          msg["From"] = f"admin@{domain}"
-          msg["To"] = recipient
-
-          try:
-              server = smtplib.SMTP(mail_server_ip, 587)
-              server.starttls()
-              server.login(f"admin@{domain}", mail_admin_pass)
-              server.send_message(msg)
-              server.quit()
-              print(f"Credentials sent to {recipient}")
-          except Exception as e:
-              print(f"Failed to send email: {e}")
-              print("Credentials are available in workflow logs")
-          PYEOF
+      # TODO: Re-enable email notifications for production
+      # - name: Send credentials via email
+      #   if: github.event.inputs.enable_mail == 'true'
+      #   run: |
+      #     python3 scripts/send-credentials.py
 
       - name: Save credentials summary
         run: |
@@ -318,5 +258,19 @@ jobs:
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Server IP | \`${{ env.SERVER_IP }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Domain | \`${{ github.event.inputs.domain }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB User | \`${{ github.event.inputs.domain | replace('.', '_') }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB Password | \`${{ env.DB_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| DB Root Password | \`${{ env.DB_ROOT_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| phpMyAdmin | http://${{ env.SERVER_IP }}:8080 |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.enable_mail }}" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Mail Accounts" >> $GITHUB_STEP_SUMMARY
+            echo "| Email | Password |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|----------|" >> $GITHUB_STEP_SUMMARY
+            echo "| admin@${{ github.event.inputs.domain }} | \`${{ env.MAIL_ADMIN_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| office@${{ github.event.inputs.domain }} | \`${{ env.MAIL_OFFICE_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| support@${{ github.event.inputs.domain }} | \`${{ env.MAIL_SUPPORT_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| info@${{ github.event.inputs.domain }} | \`${{ env.MAIL_INFO_PASSWORD }}\` |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Credentials sent to ${{ secrets.ADMIN_EMAIL }}" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Save these credentials securely!**" >> $GITHUB_STEP_SUMMARY

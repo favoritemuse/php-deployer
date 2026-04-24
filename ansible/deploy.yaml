@@ -11,8 +11,8 @@
     db_root_password: "{{ db_root_password | default('changeme_root') }}"
     admin_user: "{{ domain | regex_replace('[\\.-]', '_') | lower }}"
     admin_password: "{{ admin_password | default('changeme_admin') }}"
-    admin_ssh_key: "{{ lookup('file', '/home/roman/.ssh/admin.pub') }}"
-    developer_ssh_key: "{{ lookup('file', '/home/roman/.ssh/developer.pub') }}"
+    admin_ssh_key: "{{ lookup('file', '~/.ssh/admin.pub') }}"
+    developer_ssh_key: "{{ lookup('file', '~/.ssh/developer.pub') }}"
 
   tasks:
     - name: Update apt cache
@@ -108,10 +108,9 @@
         mode: '0644'
 
     - name: Start Docker containers
-      community.docker.docker_compose_v2:
-        project_src: "/home/{{ admin_user }}/{{ project_name }}"
-        state: present
-        build: always
+      command:
+        cmd: docker compose up -d --build
+        chdir: "/home/{{ admin_user }}/{{ project_name }}"
       become_user: "{{ admin_user }}"
 
     - name: Save credentials file
