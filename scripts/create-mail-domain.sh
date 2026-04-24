@@ -18,7 +18,7 @@ ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" root@"$MAIL_SERVER_IP" << EOF
 /usr/local/vesta/bin/v-add-mail-account admin $DOMAIN info $PASSWORD4
 EOF
 
-DKIM=$(ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" root@"$MAIL_SERVER_IP" "cat /usr/local/vesta/data/users/admin/mail/$DOMAIN.pub | sed 's/-----BEGIN PUBLIC KEY-----//g' | sed 's/-----END PUBLIC KEY-----//g' | tr -d '\n'")
+DKIM=$(ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" root@"$MAIL_SERVER_IP" "cat /usr/local/vesta/data/users/admin/mail/$DOMAIN.pub 2>/dev/null | sed 's/-----BEGIN PUBLIC KEY-----//g' | sed 's/-----END PUBLIC KEY-----//g' | tr -d '\n'" || true)
 
 echo "MAIL_ADMIN_PASSWORD=$PASSWORD1"
 echo "MAIL_OFFICE_PASSWORD=$PASSWORD2"

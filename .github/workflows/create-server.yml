@@ -183,9 +183,7 @@ jobs:
           OUTPUT=$(./scripts/create-mail-domain.sh \
             "${{ github.event.inputs.domain }}" \
             "${{ secrets.MAIL_SERVER_IP }}" \
-            "~/.ssh/admin")
-          
-          echo "$OUTPUT" >> $GITHUB_OUTPUT
+            "$HOME/.ssh/admin")
           
           while IFS='=' read -r key value; do
             echo "$key=$value" >> $GITHUB_ENV

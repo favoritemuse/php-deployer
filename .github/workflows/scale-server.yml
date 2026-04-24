@@ -46,12 +46,14 @@ jobs:
       - name: Resize droplet via DO API
         run: |
           DROPLET_ID=$(curl -s -X GET \
-            "https://api.digitalocean.com/v2/droplets?name=$(curl -s -X GET \
-              -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
-              "https://api.digitalocean.com/v2/droplets" | \
-              jq -r ".droplets[] | select(.networks.v4[] | select(.ip_address == \"${{ github.event.inputs.server_ip }}\" and .type == \"public\")).name")" \
-            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" | \
-            jq -r ".droplets[0].id")
+            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
+            "https://api.digitalocean.com/v2/droplets" | \
+            jq -r --arg ip "${{ github.event.inputs.server_ip }}" '.droplets[] | select(.networks.v4[]? | .ip_address == $ip and .type == "public") | .id')
+
+          if [ -z "$DROPLET_ID" ]; then
+            echo "Droplet with IP ${{ github.event.inputs.server_ip }} not found"
+            exit 1
+          fi
 
           echo "Resizing droplet $DROPLET_ID to ${{ steps.size.outputs.slug }}"
 
