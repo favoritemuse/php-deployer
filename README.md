@@ -1,4 +1,4 @@
-# Volodymir Infrastructure
+# PHP Deployer
 
 Infrastructure as Code for PHP server deployment on DigitalOcean.
 
@@ -14,7 +14,7 @@ Infrastructure as Code for PHP server deployment on DigitalOcean.
 
 ### Create Server
 1. Go to Actions → Create Server
-2. Enter domain name
+2. Enter domain or subdomain (e.g., `example.com` or `test.example.com`)
 3. Run workflow
 4. Credentials appear in workflow summary
 
@@ -40,8 +40,8 @@ Infrastructure as Code for PHP server deployment on DigitalOcean.
 | `DO_TOKEN` | DigitalOcean API token |
 | `DO_SSH_KEY_FINGERPRINT` | SSH key fingerprint in DO |
 | `DO_SSH_PRIVATE_KEY` | SSH private key for server access |
-| `ROMAN_SSH_PUB_KEY` | Roman's SSH public key |
-| `JEKA_SSH_PUB_KEY` | Jeka's SSH public key |
+| `ADMIN_SSH_PUB_KEY` | Admin's SSH public key |
+| `DEVELOPER_SSH_PUB_KEY` | Developer's SSH public key |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
 | `MAIL_SERVER_IP` | Mail server IP address |
 

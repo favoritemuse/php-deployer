@@ -35,5 +35,5 @@ variable "ssh_key_fingerprint" {
 variable "ssh_private_key_path" {
   description = "Path to SSH private key for Ansible connection"
   type        = string
-  default     = "~/.ssh/roman"
+  default     = "~/.ssh/admin"
 }

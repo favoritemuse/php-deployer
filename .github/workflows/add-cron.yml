@@ -29,18 +29,18 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > ~/.ssh/roman
-          chmod 600 ~/.ssh/roman
+          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > ~/.ssh/admin
+          chmod 600 ~/.ssh/admin
 
       - name: Add cron job to container
         run: |
           CRON_ENTRY="${{ github.event.inputs.cron_schedule }} ${{ github.event.inputs.command }}"
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/roman root@${{ github.event.inputs.server_ip }} \
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/admin root@${{ github.event.inputs.server_ip }} \
             "docker exec ${{ github.event.inputs.container_name }} sh -c '(crontab -l 2>/dev/null; echo \"$CRON_ENTRY\") | crontab -'"
 
       - name: Verify cron job
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/roman root@${{ github.event.inputs.server_ip }} \
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/admin root@${{ github.event.inputs.server_ip }} \
             "docker exec ${{ github.event.inputs.container_name }} crontab -l"
 
       - name: Summary

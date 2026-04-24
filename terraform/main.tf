@@ -11,6 +11,59 @@ provider "digitalocean" {
   token = var.do_token
 }
 
+resource "digitalocean_firewall" "web" {
+  name = "web-firewall-${var.domain}"
+
+  droplet_ids = [digitalocean_droplet.server.id]
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "80"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "443"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "22"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "3306"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "8080"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "udp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "icmp"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+}
+
 resource "digitalocean_droplet" "server" {
   image  = var.ubuntu_image
   name   = var.domain

@@ -4,3 +4,4 @@
 .env
 server_passwords.txt
 *.log
+ansible/hosts

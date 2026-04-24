@@ -11,8 +11,8 @@
     db_root_password: "{{ db_root_password | default('changeme_root') }}"
     admin_user: "{{ domain | regex_replace('[\\.-]', '_') | lower }}"
     admin_password: "{{ admin_password | default('changeme_admin') }}"
-    roman_ssh_key: "{{ lookup('file', '/home/roman/.ssh/roman.pub') }}"
-    jeka_ssh_key: "{{ lookup('file', '/home/roman/.ssh/jeka.pub') }}"
+    admin_ssh_key: "{{ lookup('file', '/home/roman/.ssh/admin.pub') }}"
+    developer_ssh_key: "{{ lookup('file', '/home/roman/.ssh/developer.pub') }}"
 
   tasks:
     - name: Update apt cache
@@ -57,8 +57,8 @@
         key: "{{ item }}"
         state: present
       loop:
-        - "{{ roman_ssh_key }}"
-        - "{{ jeka_ssh_key }}"
+        - "{{ admin_ssh_key }}"
+        - "{{ developer_ssh_key }}"
       when: item is defined and item != ""
 
     - name: Create project directory
