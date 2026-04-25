@@ -90,7 +90,7 @@ jobs:
         working-directory: ansible
         run: |
           ansible-playbook deploy.yaml \
-            -i "${{ env.SERVER_IP }}, " \
+            -i "${{ env.SERVER_IP }},ansible_user=root" \
             -e "domain=${{ github.event.inputs.domain }}" \
             -e "db_password=${{ env.DB_PASSWORD }}" \
             -e "db_root_password=${{ env.DB_ROOT_PASSWORD }}" \
