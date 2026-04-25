@@ -7,6 +7,7 @@ variable "do_token" {
 variable "domain" {
   description = "Domain name for the server"
   type        = string
+  default     = "example.com"
 }
 
 variable "region" {
@@ -30,6 +31,7 @@ variable "ubuntu_image" {
 variable "ssh_key_fingerprint" {
   description = "SSH key fingerprint for DigitalOcean"
   type        = string
+  default     = ""
 }
 
 variable "ssh_private_key_path" {
