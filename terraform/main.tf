@@ -18,18 +18,4 @@ resource "digitalocean_droplet" "server" {
   size   = var.size
   tags   = ["web-server"]
   ssh_keys = [var.ssh_key_fingerprint]
-
-  connection {
-    host        = self.ipv4_address
-    user        = "root"
-    type        = "ssh"
-    private_key = file(var.ssh_private_key_path)
-    timeout     = "5m"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "echo 'Server ready at ${self.ipv4_address}'"
-    ]
-  }
 }

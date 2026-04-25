@@ -41,7 +41,6 @@ jobs:
           TF_VAR_size: "s-1vcpu-1gb"
           TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_KEY_FINGERPRINT }}
           TF_VAR_ssh_private_key_path: "/tmp/ssh_key"
-          TF_VAR_allowed_ips: ${{ vars.ALLOWED_IPS }}
         run: |
           echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key

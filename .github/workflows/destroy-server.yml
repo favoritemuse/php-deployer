@@ -29,42 +29,101 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.0
-
-      - name: Download Terraform State
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-state
-          path: terraform/
-        continue-on-error: true
-
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init -lock=false
-
-      - name: Terraform Destroy
-        working-directory: terraform
-        env:
-          TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
-          TF_VAR_domain: ${{ github.event.inputs.domain }}
-          TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_KEY_FINGERPRINT }}
-          TF_VAR_ssh_private_key_path: "/tmp/ssh_key"
+      - name: Find droplet by name
+        id: find
         run: |
-          echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > /tmp/ssh_key
-          chmod 600 /tmp/ssh_key
-          terraform destroy -auto-approve -lock=false \
-            -var="do_token=${{ secrets.DO_TOKEN }}" \
-            -var="domain=${{ github.event.inputs.domain }}" \
-            -var="ssh_key_fingerprint=${{ secrets.DO_SSH_KEY_FINGERPRINT }}" \
-            -var="ssh_private_key_path=/tmp/ssh_key"
+          DROPLET_ID=$(curl -s -X GET \
+            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
+            "https://api.digitalocean.com/v2/droplets?name=${{ github.event.inputs.domain }}" | \
+            jq -r '.droplets[] | select(.name == "${{ github.event.inputs.domain }}") | .id')
+
+          if [ -z "$DROPLET_ID" ]; then
+            echo "Error: Droplet '${{ github.event.inputs.domain }}' not found"
+            exit 1
+          fi
+
+          echo "droplet_id=$DROPLET_ID" >> $GITHUB_OUTPUT
+          echo "Found droplet: $DROPLET_ID"
+
+      - name: Delete droplet
+        run: |
+          curl -s -X DELETE \
+            -H "Authorization: Bearer ${{ secrets.DO_TOKEN }}" \
+            "https://api.digitalocean.com/v2/droplets/${{ steps.find.outputs.droplet_id }}"
+
+          echo "Droplet ${{ steps.find.outputs.droplet_id }} deleted"
+
+      - name: Delete Cloudflare DNS records
+        run: |
+          DOMAIN="${{ github.event.inputs.domain }}"
+          API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+
+          # Find zone
+          find_zone() {
+            local domain=$1
+            # Try exact match
+            local resp=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$domain" -H "Authorization: Bearer $API_TOKEN")
+            local zone_id=$(echo "$resp" | jq -r '.result[0].id')
+            if [ "$zone_id" != "null" ] && [ -n "$zone_id" ]; then
+              echo "$zone_id $domain"
+              return 0
+            fi
+            # Try parent domains
+            local parts=(${domain//./ })
+            for ((i=1; i<${#parts[@]}; i++)); do
+              local parent=$(IFS=. ; echo "${parts[*]:$i}")
+              resp=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$parent" -H "Authorization: Bearer $API_TOKEN")
+              zone_id=$(echo "$resp" | jq -r '.result[0].id')
+              if [ "$zone_id" != "null" ] && [ -n "$zone_id" ]; then
+                echo "$zone_id $parent"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ZONE_INFO=$(find_zone "$DOMAIN") || true
+          ZONE_ID=$(echo "$ZONE_INFO" | awk '{print $1}')
+          ZONE_NAME=$(echo "$ZONE_INFO" | awk '{print $2}')
+
+          if [ -z "$ZONE_ID" ]; then
+            echo "Zone not found for $DOMAIN, skipping DNS cleanup"
+            exit 0
+          fi
+
+          echo "Found zone: $ZONE_NAME (ID: $ZONE_ID)"
+
+          # Determine record name relative to zone
+          if [ "$DOMAIN" == "$ZONE_NAME" ]; then
+            RECORD_NAME="$DOMAIN"
+            WWW_NAME="www.$DOMAIN"
+          else
+            RECORD_NAME="$DOMAIN"
+            WWW_NAME="www.$RECORD_NAME"
+          fi
+
+          # Delete matching A records
+          for NAME in "$RECORD_NAME" "$WWW_NAME"; do
+            RECORDS=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=$NAME" -H "Authorization: Bearer $API_TOKEN")
+            echo "$RECORDS" | jq -r '.result[].id' | while read -r RECORD_ID; do
+              if [ -n "$RECORD_ID" ] && [ "$RECORD_ID" != "null" ]; then
+                DELETE_RESP=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" -H "Authorization: Bearer $API_TOKEN")
+                SUCCESS=$(echo "$DELETE_RESP" | jq -r '.success')
+                if [ "$SUCCESS" = "true" ]; then
+                  echo "Deleted A record: $NAME (ID: $RECORD_ID)"
+                else
+                  echo "Failed to delete A record: $NAME (ID: $RECORD_ID)"
+                  echo "Response: $DELETE_RESP"
+                fi
+              fi
+            done
+          done
 
       - name: Summary
         run: |
           echo "## Server Destroyed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Domain:** \`${{ github.event.inputs.domain }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Droplet ID:** \`${{ steps.find.outputs.droplet_id }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Droplet has been deleted via Terraform" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Droplet has been deleted via DO API" >> $GITHUB_STEP_SUMMARY
