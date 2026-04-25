@@ -12,7 +12,7 @@ on:
         required: true
         type: choice
         options:
-          - s-1vcpu-1gb ($6/mo)
+          - s-1vcpu-1gb ($6/mo) - Test/Cheapest
           - s-1vcpu-2gb ($12/mo)
           - s-2vcpu-2gb ($18/mo)
           - s-2vcpu-4gb ($24/mo)
@@ -33,7 +33,7 @@ jobs:
         id: size
         run: |
           case "${{ github.event.inputs.new_size }}" in
-            "s-1vcpu-1gb ($6/mo)") echo "slug=s-1vcpu-1gb" >> $GITHUB_OUTPUT ;;
+            "s-1vcpu-1gb ($6/mo) - Test/Cheapest") echo "slug=s-1vcpu-1gb" >> $GITHUB_OUTPUT ;;
             "s-1vcpu-2gb ($12/mo)") echo "slug=s-1vcpu-2gb" >> $GITHUB_OUTPUT ;;
             "s-2vcpu-2gb ($18/mo)") echo "slug=s-2vcpu-2gb" >> $GITHUB_OUTPUT ;;
             "s-2vcpu-4gb ($24/mo)") echo "slug=s-2vcpu-4gb" >> $GITHUB_OUTPUT ;;
