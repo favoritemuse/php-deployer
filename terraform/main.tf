@@ -1,11 +1,4 @@
 terraform {
-  cloud {
-    organization = "php-deployer"
-    workspaces {
-      name = "php-deployer"
-    }
-  }
-
   required_providers {
     digitalocean = {
       source  = "digitalocean/digitalocean"
@@ -31,7 +24,7 @@ resource "digitalocean_droplet" "server" {
     user        = "root"
     type        = "ssh"
     private_key = file(var.ssh_private_key_path)
-    timeout     = "2m"
+    timeout     = "5m"
   }
 
   provisioner "remote-exec" {
