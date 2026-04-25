@@ -244,11 +244,21 @@ jobs:
               print(f"Failed to create DKIM record: {resp.text}")
           PYEOF
 
-      # TODO: Re-enable email notifications for production
-      # - name: Send credentials via email
-      #   if: github.event.inputs.enable_mail == 'true'
-      #   run: |
-      #     python3 scripts/send-credentials.py
+      - name: Send credentials via email
+        if: github.event.inputs.enable_mail == 'true'
+        env:
+          DOMAIN: ${{ github.event.inputs.domain }}
+          SERVER_IP: ${{ env.SERVER_IP }}
+          MAIL_SERVER_IP: ${{ secrets.MAIL_SERVER_IP }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_ROOT_PASSWORD: ${{ env.DB_ROOT_PASSWORD }}
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+          MAIL_ADMIN_PASSWORD: ${{ env.MAIL_ADMIN_PASSWORD }}
+          MAIL_OFFICE_PASSWORD: ${{ env.MAIL_OFFICE_PASSWORD }}
+          MAIL_SUPPORT_PASSWORD: ${{ env.MAIL_SUPPORT_PASSWORD }}
+          MAIL_INFO_PASSWORD: ${{ env.MAIL_INFO_PASSWORD }}
+        run: python3 scripts/send-credentials.py
 
       - name: Save credentials summary
         run: |

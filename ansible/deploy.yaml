@@ -113,28 +113,6 @@
         chdir: "/home/{{ admin_user }}/{{ project_name }}"
       become_user: "{{ admin_user }}"
 
-    - name: Save credentials file
-      copy:
-        dest: "/home/{{ admin_user }}/{{ project_name }}/server_passwords.txt"
-        content: |
-          Domain: {{ domain_name }}
-          Database Name: {{ db_name }}
-          Database User: {{ db_user }}
-          Database Password: {{ db_password }}
-          DB Root Password: {{ db_root_password }}
-          Admin User: {{ admin_user }}
-          Admin Password: {{ admin_password }}
-        owner: "{{ admin_user }}"
-        group: "{{ admin_user }}"
-        mode: '0600'
-
-    - name: Set ownership for project directory
-      file:
-        path: "/home/{{ admin_user }}/{{ project_name }}"
-        owner: "{{ admin_user }}"
-        group: "{{ admin_user }}"
-        recurse: yes
-
     - name: Print deployment info
       debug:
         msg: |

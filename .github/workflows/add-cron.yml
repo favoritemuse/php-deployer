@@ -32,11 +32,26 @@ jobs:
           echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > ~/.ssh/admin
           chmod 600 ~/.ssh/admin
 
-      - name: Add cron job to container
+      - name: Validate inputs
         run: |
-          CRON_ENTRY="${{ github.event.inputs.cron_schedule }} ${{ github.event.inputs.command }}"
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/admin root@${{ github.event.inputs.server_ip }} \
-            "docker exec ${{ github.event.inputs.container_name }} sh -c '(crontab -l 2>/dev/null; echo \"$CRON_ENTRY\") | crontab -'"
+          if [[ ! "${{ github.event.inputs.cron_schedule }}" =~ ^[0-9*/,\- ]+$ ]]; then
+            echo "Error: Invalid cron schedule format"
+            exit 1
+          fi
+          if [[ ! "${{ github.event.inputs.server_ip }}" =~ ^[0-9.]+$ ]]; then
+            echo "Error: Invalid IP address"
+            exit 1
+          fi
+
+      - name: Add cron job to container
+        env:
+          CRON_SCHEDULE: ${{ github.event.inputs.cron_schedule }}
+          CRON_COMMAND: ${{ github.event.inputs.command }}
+          CONTAINER: ${{ github.event.inputs.container_name }}
+          SERVER_IP: ${{ github.event.inputs.server_ip }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/admin root@"$SERVER_IP" \
+            "docker exec $CONTAINER sh -c 'echo \"$CRON_SCHEDULE $CRON_COMMAND\" | crontab -'"
 
       - name: Verify cron job
         run: |
