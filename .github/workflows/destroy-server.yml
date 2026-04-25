@@ -1,5 +1,7 @@
 name: Destroy Server
 
+run-name: ${{ github.event.inputs.domain }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -35,7 +37,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init
+        run: terraform init -lock=false
 
       - name: Terraform Destroy
         working-directory: terraform
@@ -47,7 +49,7 @@ jobs:
         run: |
           echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
-          terraform destroy -auto-approve \
+          terraform destroy -auto-approve -lock=false \
             -var="do_token=${{ secrets.DO_TOKEN }}" \
             -var="domain=${{ github.event.inputs.domain }}" \
             -var="ssh_key_fingerprint=${{ secrets.DO_SSH_KEY_FINGERPRINT }}" \

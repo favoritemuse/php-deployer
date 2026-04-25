@@ -1,5 +1,7 @@
 name: Create Server
 
+run-name: ${{ github.event.inputs.domain }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -29,7 +31,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init
+        run: terraform init -lock=false
 
       - name: Terraform Apply
         working-directory: terraform
@@ -43,7 +45,7 @@ jobs:
         run: |
           echo "${{ secrets.DO_SSH_PRIVATE_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
-          terraform apply -auto-approve \
+          terraform apply -auto-approve -lock=false \
             -var="do_token=${{ secrets.DO_TOKEN }}" \
             -var="domain=${{ github.event.inputs.domain }}" \
             -var="region=ams3" \
