@@ -45,6 +45,14 @@ Infrastructure as Code for PHP server deployment on DigitalOcean.
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
 | `MAIL_SERVER_IP` | Mail server IP address |
 
+## Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ALLOWED_IPS` | IPs allowed for SSH and phpMyAdmin (JSON array) | `["1.2.3.4/32", "5.6.7.8/32"]` |
+
+> If variables are not set, access is open to all IPs (`0.0.0.0/0`).
+
 ## Structure
 
 ```
