@@ -1,4 +1,11 @@
 terraform {
+  cloud {
+    organization = "php-deployer"
+    workspaces {
+      name = "php-deployer"
+    }
+  }
+
   required_providers {
     digitalocean = {
       source  = "digitalocean/digitalocean"
